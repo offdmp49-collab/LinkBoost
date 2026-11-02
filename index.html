@@ -31,18 +31,18 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px;borde
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--sun);color:#222;padding:10px 18px;border-radius:10px;display:none;z-index:9}
 code{background:var(--ink);padding:2px 6px;border-radius:6px;word-break:break-all}
 </style></head><body>
-<div id="app"></div><div id="toast"></div>
+<div id="app"><p style="padding:24px" class="mut">লোড হচ্ছে…</p></div><div id="toast"></div>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script>
 // ====== এখানে আপনার Firebase কনফিগ বসান ======
-const cfg={apiKey:"",authDomain:"",databaseURL:"",projectId:"",appId:""};
+const cfg={apiKey:"AIzaSyAE7b4XzqTljc1652BJVs6xg1Plx6njRKA",authDomain:"linkboost-f0d5b.firebaseapp.com",databaseURL:"https://linkboost-f0d5b-default-rtdb.firebaseio.com",projectId:"linkboost-f0d5b",storageBucket:"linkboost-f0d5b.firebasestorage.app",messagingSenderId:"239440539649",appId:"1:239440539649:web:61c2ed74845bd8610e9000"};
 // ===============================================
 firebase.initializeApp(cfg);const auth=firebase.auth(),db=firebase.database();
 const app=document.getElementById('app');let me=null,isAdmin=false,S={},bal=0;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const toast=m=>{const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3200)};
+const toast=(m,ms=3200)=>{const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',ms)};
 const tk=n=>'৳'+(+n||0).toLocaleString('bn-BD',{maximumFractionDigits:2});
 const dt=t=>t?new Date(t).toLocaleString('bn-BD'):'';
 const cpv=()=>+S.costPerVisit||0.5;
@@ -54,9 +54,11 @@ async function myCountry(){try{const t=await (await fetch('https://www.cloudflar
  try{return (await (await fetch('https://ipapi.co/country/')).text()).trim().slice(0,2)}catch(e){}return null}
 const METHODS={bkash:['বিকাশ','bdt'],nagad:['নগদ','bdt'],rocket:['রকেট','bdt'],binance:['Binance','usd'],bybit:['Bybit','usd'],bitget:['Bitget','usd']};
 
+const T=p=>Promise.race([p,new Promise((_,r)=>setTimeout(()=>r(new Error('ডাটাবেস সাড়া দিচ্ছে না। Firebase এ Realtime Database তৈরি ও Rules Publish হয়েছে কিনা দেখুন')),7000))]);
+addEventListener('error',e=>{if(app.textContent.includes('লোড হচ্ছে'))app.innerHTML='<main><h2>এরর</h2><code>'+esc(e.message)+'</code></main>'});
 auth.onAuthStateChanged(async u=>{me=u;isAdmin=false;bal=0;
- try{S=(await db.ref('settings').get()).val()||{};
-  if(u){isAdmin=(await db.ref('admins/'+u.uid).get()).exists();bal=(await db.ref('users/'+u.uid+'/balance').get()).val()||0}}catch(e){toast('ডাটাবেস সংযোগ হয়নি: '+e.message)}
+ try{S=(await T(db.ref('settings').get())).val()||{};
+  if(u){isAdmin=(await T(db.ref('admins/'+u.uid).get())).exists();bal=(await T(db.ref('users/'+u.uid+'/balance').get())).val()||0}}catch(e){toast(e.message,8000)}
  route()});
 addEventListener('hashchange',route);
 
