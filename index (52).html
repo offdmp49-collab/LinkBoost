@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="bn"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LinkBoost – লিংক ক্যাম্পেইন</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0f1a24;--panel:#172633;--line:#27394a;--txt:#e8eef3;--mut:#8ea3b4;--mint:#37d6a0;--sun:#ffc24b;--red:#ff6b6b}
+@media(prefers-color-scheme:light){:root{--ink:#f3f6f8;--panel:#fff;--line:#d9e2e9;--txt:#14222d;--mut:#5d7487;--mint:#0a9a6c;--sun:#b57800;--red:#d63c3c}}
+*{box-sizing:border-box;margin:0}body{font:16px/1.6 'Hind Siliguri',system-ui,sans-serif;background:var(--ink);color:var(--txt);min-height:100vh}
+a{color:var(--mint);text-decoration:none}:focus-visible{outline:2px solid var(--sun);outline-offset:2px}
+nav{display:flex;gap:6px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--ink);z-index:5}
+nav b{font-size:20px;margin-right:auto}nav b i{color:var(--mint);font-style:normal}
+nav a,nav button{padding:6px 12px;border-radius:8px;color:var(--txt);background:none;border:0;font:inherit;cursor:pointer}
+nav a.on{background:var(--panel);color:var(--mint)}
+main{max-width:980px;margin:0 auto;padding:22px 16px 60px}
+h1{font-size:clamp(30px,6vw,52px);line-height:1.15;margin-bottom:12px}h2{font-size:22px;margin:22px 0 10px}
+.mut{color:var(--mut)}.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.big{font-size:30px;font-weight:700;color:var(--mint)}
+input,select,textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--ink);color:var(--txt);font:inherit;margin:4px 0 10px}
+label{font-size:14px;color:var(--mut)}
+.btn{background:var(--mint);color:#04241a;border:0;border-radius:10px;padding:10px 18px;font:600 16px inherit;font-family:inherit;cursor:pointer}
+.btn.s{padding:4px 10px;font-size:14px}.btn.r{background:var(--red);color:#fff}.btn.g{background:var(--line);color:var(--txt)}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.tbl{overflow-x:auto}.tag{padding:2px 8px;border-radius:99px;font-size:12px;background:var(--line)}
+.tag.active,.tag.approved{background:var(--mint);color:#04241a}.tag.pending{background:var(--sun);color:#2b1d00}.tag.rejected,.tag.paused{background:var(--red);color:#fff}
+.hero{display:grid;gap:26px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));align-items:center;padding:30px 0}
+.pm{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.pm label{border:1px solid var(--line);border-radius:10px;padding:8px;text-align:center;cursor:pointer;color:var(--txt)}
+.pm input{display:none}.pm label:has(input:checked){border-color:var(--mint);background:var(--ink);color:var(--mint)}
+.ring{width:130px;height:130px;border-radius:50%;display:grid;place-items:center;font-size:44px;font-weight:700;margin:20px auto;border:6px solid var(--line);border-top-color:var(--mint)}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--sun);color:#222;padding:10px 18px;border-radius:10px;display:none;z-index:9}
+code{background:var(--ink);padding:2px 6px;border-radius:6px;word-break:break-all}
+</style></head><body>
+<div id="app"></div><div id="toast"></div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+// ====== এখানে আপনার Firebase কনফিগ বসান ======
+const cfg={apiKey:"",authDomain:"",databaseURL:"",projectId:"",appId:""};
+// ===============================================
+firebase.initializeApp(cfg);const auth=firebase.auth(),db=firebase.database();
+const app=document.getElementById('app');let me=null,isAdmin=false,S={},bal=0;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const toast=m=>{const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3200)};
+const tk=n=>'৳'+(+n||0).toLocaleString('bn-BD',{maximumFractionDigits:2});
+const dt=t=>t?new Date(t).toLocaleString('bn-BD'):'';
+const cpv=()=>+S.costPerVisit||0.5;
+function price(cc){const m={};(S.cpvMap||'').split(',').forEach(p=>{const[k,v]=p.split(':');if(k&&+v>0)m[k.trim().toUpperCase()]=+v});return m[cc]||cpv()}
+const base=()=>location.origin+location.pathname;
+const CTRY={ALL:'সব দেশ',BD:'বাংলাদেশ',IN:'ভারত',PK:'পাকিস্তান',NP:'নেপাল',LK:'শ্রীলঙ্কা',US:'যুক্তরাষ্ট্র',GB:'যুক্তরাজ্য',CA:'কানাডা',AU:'অস্ট্রেলিয়া',AE:'সংযুক্ত আরব আমিরাত',SA:'সৌদি আরব',MY:'মালয়েশিয়া',SG:'সিঙ্গাপুর',DE:'জার্মানি'};
+const cn=c=>CTRY[c||'ALL']||c;
+async function myCountry(){try{const t=await (await fetch('https://www.cloudflare.com/cdn-cgi/trace')).text();const m=t.match(/loc=([A-Z]{2})/);if(m)return m[1]}catch(e){}
+ try{return (await (await fetch('https://ipapi.co/country/')).text()).trim().slice(0,2)}catch(e){}return null}
+const METHODS={bkash:['বিকাশ','bdt'],nagad:['নগদ','bdt'],rocket:['রকেট','bdt'],binance:['Binance','usd'],bybit:['Bybit','usd'],bitget:['Bitget','usd']};
+
+auth.onAuthStateChanged(async u=>{me=u;isAdmin=false;bal=0;
+ try{S=(await db.ref('settings').get()).val()||{};
+  if(u){isAdmin=(await db.ref('admins/'+u.uid).get()).exists();bal=(await db.ref('users/'+u.uid+'/balance').get()).val()||0}}catch(e){toast('ডাটাবেস সংযোগ হয়নি: '+e.message)}
+ route()});
+addEventListener('hashchange',route);
+
+function nav(){const h=location.hash;const l=(p,t)=>`<a href="#/${p}" class="${h.startsWith('#/'+p)?'on':''}">${t}</a>`;
+ return `<nav><b>Link<i>Boost</i></b>${me?l('dash','ড্যাশবোর্ড')+l('new','নতুন ক্যাম্পেইন')+l('dep','ডিপোজিট')+(isAdmin?l('admin','অ্যাডমিন'):'')+`<span class="mut">${tk(bal)}</span><button onclick="auth.signOut()">লগআউট</button>`:''}</nav>`}
+function route(){const h=location.hash||'#/';
+ if(h.startsWith('#/r/')){try{localStorage.ref=h.slice(4)}catch(e){}location.hash='#/';return}
+ if(h.startsWith('#/go/'))return go(h.slice(5));
+ if(!me)return landing();
+ if(h.startsWith('#/new'))return newCamp();
+ if(h.startsWith('#/dep'))return deposit();
+ if(h.startsWith('#/admin'))return isAdmin?admin('dep'):(location.hash='#/dash');
+ return dash()}
+const page=h=>{app.innerHTML=nav()+'<main>'+h+'</main>'};
+
+/* ---------- Landing / Auth ---------- */
+let reg=false;
+function landing(){page(`<div class="hero"><div><h1>আপনার লিংকে আসল ভিজিটর আনুন</h1>
+<p class="mut">লিংক দিন, বাজেট ঠিক করুন, ক্যাম্পেইন চালু করুন। ডিপোজিট করুন বিকাশ, নগদ, রকেট বা ক্রিপ্টো (Binance, Bybit, Bitget) দিয়ে।</p>
+<p class="mut" style="margin-top:10px">প্রতি ভিজিট: <b style="color:var(--sun)">${tk(cpv())}</b></p></div>
+<div class="card"><h2 style="margin-top:0">${reg?'অ্যাকাউন্ট খুলুন':'লগইন'}</h2>
+${reg?'<label>নাম</label><input id="nm" autocomplete="name">':''}
+<label>ইমেইল</label><input id="em" type="email" autocomplete="email"><label>পাসওয়ার্ড (৬+ অক্ষর)</label><input id="pw" type="password" autocomplete="${reg?'new-password':'current-password'}">
+<button class="btn" onclick="doAuth()">${reg?'রেজিস্টার':'লগইন'}</button>
+<p style="margin-top:12px"><a href="#/" onclick="reg=!reg;landing();return false">${reg?'আগে থেকেই অ্যাকাউন্ট আছে?':'নতুন অ্যাকাউন্ট খুলুন'}</a></p></div></div>`)}
+async function doAuth(){const e=em.value.trim(),p=pw.value;try{
+ if(reg){const c=await auth.createUserWithEmailAndPassword(e,p);await db.ref('users/'+c.user.uid).update({name:nm.value.trim()||'User',email:e,...((localStorage.ref&&localStorage.ref!==c.user.uid)?{ref:localStorage.ref}:{})})}
+ else await auth.signInWithEmailAndPassword(e,p);location.hash='#/dash'}catch(x){toast(x.message)}}
+
+/* ---------- Dashboard ---------- */
+async function dash(){page('<p class="mut">লোড হচ্ছে…</p>');
+ const ids=Object.keys((await db.ref('userCamps/'+me.uid).get()).val()||{});
+ const cs=(await Promise.all(ids.map(async i=>({id:i,...(await db.ref('campaigns/'+i).get()).val()})))).filter(c=>c.url).sort((a,b)=>b.created-a.created);
+ const ds=Object.entries((await db.ref('deposits/'+me.uid).get()).val()||{}).sort((a,b)=>b[1].created-a[1].created);
+ const tot=cs.reduce((a,c)=>a+(c.visits||0),0);
+ page(`<div class="grid"><div class="card"><span class="mut">ব্যালেন্স</span><div class="big">${tk(bal)}</div></div>
+<div class="card"><span class="mut">ক্যাম্পেইন</span><div class="big">${cs.length}</div></div>
+<div class="card"><span class="mut">মোট ভিজিট</span><div class="big">${tot}</div></div></div>
+${+S.refPct>0?`<div class="card" style="margin-top:14px"><b>আপনার রেফারেল লিংক</b><br><code>${base()}#/r/${me.uid}</code><p class="mut">আপনার লিংকে এসে নতুন কেউ প্রথম ডিপোজিট করলে তার ${S.refPct}% বোনাস আপনার ব্যালেন্সে যোগ হবে।</p></div>`:''}
+<h2>আমার ক্যাম্পেইন</h2><div class="card tbl">${cs.length?`<table><tr><th>নাম</th><th>ভিজিট</th><th>স্ট্যাটাস</th><th>শেয়ার লিংক</th></tr>${cs.map(c=>`<tr><td>${esc(c.title)}<br><span class="mut">${esc(cn(c.country))}</span></td><td>${c.visits||0}/${c.max}</td><td><span class="tag ${c.status}">${{pending:'রিভিউতে',active:'চালু',paused:'বন্ধ',rejected:'বাতিল'}[c.status]||c.status}</span></td><td><code>${base()}#/go/${c.id}</code></td></tr>`).join('')}</table>`:'<p class="mut">এখনো কোনো ক্যাম্পেইন নেই।</p>'}</div>
+<h2>ডিপোজিট হিস্টোরি</h2><div class="card tbl">${ds.length?`<table><tr><th>তারিখ</th><th>মাধ্যম</th><th>পরিমাণ</th><th>স্ট্যাটাস</th></tr>${ds.map(([,d])=>`<tr><td>${dt(d.created)}</td><td>${esc(METHODS[d.method]?.[0])}</td><td>${d.amount} ${d.cur==='usd'?'USD':'৳'}</td><td><span class="tag ${d.status}">${d.status}</span></td></tr>`).join('')}</table>`:'<p class="mut">কোনো ডিপোজিট নেই।</p>'}</div>`)}
+
+/* ---------- New campaign ---------- */
+function newCamp(){page(`<h2 style="margin-top:0">নতুন ক্যাম্পেইন</h2><div class="card" style="max-width:520px">
+<label>ক্যাম্পেইনের নাম</label><input id="t" maxlength="60"><label>গন্তব্য লিংক (https://…)</label><input id="u" type="url">
+<label>কতজন ভিজিটর চান?</label><input id="n" type="number" min="${S.minVisits||100}" value="${S.minVisits||100}" oninput="upd()">
+<label>কোন দেশের ভিজিটর চান?</label><select id="cty" onchange="upd()">${Object.entries(CTRY).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select>
+<p>খরচ: <b id="c" style="color:var(--sun)">${tk((S.minVisits||100)*cpv())}</b> <span class="mut">(প্রতি ভিজিট <span id="pp">${tk(cpv())}</span>, ব্যালেন্স ${tk(bal)})</span></p>
+<button class="btn" onclick="mk()">ক্যাম্পেইন জমা দিন</button>
+<p class="mut" style="margin-top:10px">অ্যাডমিন রিভিউ করে চালু করবেন। অ্যাডাল্ট, স্ক্যাম বা ম্যালওয়্যার লিংক গ্রহণযোগ্য নয়।</p></div>`)}
+function upd(){const p=price(cty.value);pp.textContent=tk(p);c.textContent=tk(n.value*p)}
+async function mk(){const title=t.value.trim(),url=u.value.trim(),max=Math.floor(+n.value),cost=+(max*price(cty.value)).toFixed(2);
+ if(!title||!/^https?:\/\//i.test(url))return toast('নাম ও সঠিক লিংক দিন');
+ if(max<(S.minVisits||100))return toast('ন্যূনতম ভিজিট '+(S.minVisits||100));
+ const cur=(await db.ref('users/'+me.uid+'/balance').get()).val()||0;
+ if(cur<cost)return toast('ব্যালেন্স কম — আগে ডিপোজিট করুন');
+ const id=db.ref('campaigns').push().key;
+ try{await db.ref().update({['campaigns/'+id]:{uid:me.uid,title,url,max,cost,country:cty.value,visits:0,status:'pending',created:firebase.database.ServerValue.TIMESTAMP},['userCamps/'+me.uid+'/'+id]:true,['users/'+me.uid+'/balance']:+(cur-cost).toFixed(2)});
+  bal=cur-cost;toast('জমা হয়েছে');location.hash='#/dash'}catch(x){toast(x.message)}}
+
+/* ---------- Deposit ---------- */
+function deposit(){const k=Object.keys(METHODS).filter(m=>S['pay_'+m]);
+ page(`<h2 style="margin-top:0">ডিপোজিট</h2><div class="card" style="max-width:520px">${k.length?`
+<div class="pm">${k.map((m,i)=>`<label><input type="radio" name="m" value="${m}" ${i?'':'checked'} onchange="pinfo()">${METHODS[m][0]}</label>`).join('')}</div>
+<div id="pi" class="card" style="margin-bottom:10px"></div>
+<label id="al">পরিমাণ</label><input id="a" type="number" min="1"><label>Transaction ID / TxID</label><input id="x">
+<button class="btn" onclick="sendDep()">জমা দিন</button>`:'<p class="mut">এখনো কোনো পেমেন্ট মাধ্যম চালু হয়নি।</p>'}</div>`);if(k.length)pinfo()}
+function pinfo(){const m=document.querySelector('[name=m]:checked').value,usd=METHODS[m][1]==='usd';
+ pi.innerHTML=`${usd?'এই ঠিকানায় USDT পাঠান':'এই নম্বরে Send Money করুন'}:<br><code>${esc(S['pay_'+m])}</code>${usd?`<br><span class="mut">রেট: ১ USD = ${tk(S.usdRate||120)}</span>`:''}`;
+ al.textContent=usd?'পরিমাণ (USD)':'পরিমাণ (টাকা)'}
+async function sendDep(){const m=document.querySelector('[name=m]:checked').value,amount=+a.value,tx=x.value.trim();
+ if(!(amount>0)||tx.length<4)return toast('পরিমাণ ও TxID দিন');
+ try{await db.ref('deposits/'+me.uid).push({method:m,cur:METHODS[m][1],amount,tx,status:'pending',email:me.email,created:firebase.database.ServerValue.TIMESTAMP});
+  toast('জমা হয়েছে, অ্যাডমিন যাচাই করবেন');location.hash='#/dash'}catch(e){toast(e.message)}}
+
+/* ---------- Visitor redirect page ---------- */
+async function go(id){app.innerHTML='<main style="text-align:center"><p class="mut">লোড হচ্ছে…</p></main>';
+ const c=(await db.ref('campaigns/'+id).get()).val();
+ if(!c||c.status!=='active'||(c.visits||0)>=c.max){app.innerHTML='<main style="text-align:center"><h2>এই ক্যাম্পেইন এখন চালু নেই</h2></main>';return}
+ let ok=true;
+ if(c.country&&c.country!=='ALL'){const mc=await myCountry();
+  if(mc&&mc!==c.country){app.innerHTML=`<main style="text-align:center"><h2>এই ক্যাম্পেইন আপনার দেশের জন্য নয়</h2><p class="mut">শুধু ${esc(cn(c.country))} এর ভিজিটর গ্রহণ করা হচ্ছে।</p></main>`;return}
+  ok=mc===c.country}
+ let left=+S.wait||8;
+ app.innerHTML=`<main style="text-align:center"><h2>${esc(c.title)}</h2><p class="mut">আপনাকে লিংকে নেওয়া হচ্ছে</p><div class="ring" id="r">${left}</div><p class="mut">অনুগ্রহ করে অপেক্ষা করুন</p></main>`;
+ const iv=setInterval(async()=>{left--;r.textContent=left;if(left>0)return;clearInterval(iv);
+  try{const key='v_'+id;if(ok&&!localStorage[key]){localStorage[key]=1;await db.ref('campaigns/'+id+'/visits').transaction(v=>(v||0)+1)}}catch(e){}
+  location.href=c.url},1000)}
+
+/* ---------- Admin ---------- */
+const AT=[['dep','ডিপোজিট'],['camp','ক্যাম্পেইন'],['usr','ইউজার'],['set','সেটিংস']];
+async function admin(tab){page(`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">${AT.map(([k,t])=>`<button class="btn s ${k===tab?'':'g'}" onclick="admin('${k}')">${t}</button>`).join('')}</div><div id="ab"><p class="mut">লোড হচ্ছে…</p></div>`);
+ const ab=document.getElementById('ab');
+ if(tab==='dep'){const all=(await db.ref('deposits').get()).val()||{},rows=[];
+  Object.entries(all).forEach(([u,o])=>Object.entries(o).forEach(([i,d])=>rows.push({u,i,...d})));rows.sort((a,b)=>b.created-a.created);
+  ab.innerHTML=`<div class="card tbl"><table><tr><th>তারিখ</th><th>ইউজার</th><th>মাধ্যম</th><th>পরিমাণ</th><th>TxID</th><th></th></tr>${rows.map(d=>`<tr><td>${dt(d.created)}</td><td>${esc(d.email)}</td><td>${esc(METHODS[d.method]?.[0])}</td><td>${d.amount} ${d.cur==='usd'?'USD':'৳'}</td><td><code>${esc(d.tx)}</code></td><td>${d.status==='pending'?`<button class="btn s" onclick="dep('${d.u}','${d.i}',${d.cur==='usd'?d.amount*(S.usdRate||120):d.amount},1)">অনুমোদন</button> <button class="btn s r" onclick="dep('${d.u}','${d.i}',0,0)">বাতিল</button>`:`<span class="tag ${d.status}">${d.status}</span>`}</td></tr>`).join('')}</table></div>`}
+ if(tab==='camp'){const all=Object.entries((await db.ref('campaigns').get()).val()||{}).sort((a,b)=>b[1].created-a[1].created);
+  ab.innerHTML=`<div class="card tbl"><table><tr><th>নাম / লিংক</th><th>ভিজিট</th><th>স্ট্যাটাস</th><th></th></tr>${all.map(([i,c])=>`<tr><td>${esc(c.title)} <span class="tag">${esc(cn(c.country))}</span><br><a href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">${esc(c.url)}</a></td><td>${c.visits||0}/${c.max}</td><td><span class="tag ${c.status}">${c.status}</span></td><td><button class="btn s" onclick="cs('${i}','active')">চালু</button> <button class="btn s g" onclick="cs('${i}','paused')">বন্ধ</button> <button class="btn s r" onclick="cs('${i}','rejected')">বাতিল</button></td></tr>`).join('')}</table></div>`}
+ if(tab==='usr'){const us=Object.entries((await db.ref('users').get()).val()||{});
+  ab.innerHTML=`<div class="card tbl"><table><tr><th>নাম</th><th>ইমেইল</th><th>ব্যালেন্স</th></tr>${us.map(([,u])=>`<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${tk(u.balance)}</td></tr>`).join('')}</table></div>`}
+ if(tab==='set'){const f=(k,l,ph='')=>`<label>${l}</label><input data-k="${k}" value="${esc(S[k])}" placeholder="${ph}">`;
+  ab.innerHTML=`<div class="card" style="max-width:520px">${f('costPerVisit','প্রতি ভিজিটের মূল্য (টাকা)','0.5')}${f('minVisits','ন্যূনতম ভিজিট','100')}${f('wait','অপেক্ষার সময় (সেকেন্ড)','8')}${f('usdRate','১ USD = কত টাকা','120')}${f('cpvMap','দেশভিত্তিক দাম, টাকায় (ফাঁকা হলে সাধারণ দাম)','US:2,GB:1.5,CA:1.5')}${f('refPct','রেফারেল বোনাস % (০ বা ফাঁকা = বন্ধ)','5')}
+  <h2>পেমেন্ট নম্বর / ঠিকানা (ফাঁকা রাখলে মাধ্যমটি বন্ধ)</h2>${Object.entries(METHODS).map(([m,v])=>f('pay_'+m,v[0])).join('')}<button class="btn" onclick="saveSet()">সেভ</button></div>`}}
+async function dep(u,i,credit,ok){try{
+ if(ok){await db.ref('users/'+u+'/balance').transaction(b=>+((b||0)+credit).toFixed(2));
+  const us=(await db.ref('users/'+u).get()).val()||{};
+  if(us.ref&&!us.refPaid&&+S.refPct>0){await db.ref('users/'+us.ref+'/balance').transaction(b=>+((b||0)+credit*S.refPct/100).toFixed(2));await db.ref('users/'+u+'/refPaid').set(true)}}
+ await db.ref('deposits/'+u+'/'+i+'/status').set(ok?'approved':'rejected');toast('হয়েছে');admin('dep')}catch(e){toast(e.message)}}
+async function cs(i,s){await db.ref('campaigns/'+i+'/status').set(s);admin('camp')}
+async function saveSet(){const o={};document.querySelectorAll('[data-k]').forEach(e=>o[e.dataset.k]=e.value.trim());
+ try{await db.ref('settings').set(o);S=o;toast('সেভ হয়েছে')}catch(e){toast(e.message)}}
+</script></body></html>
